@@ -1,0 +1,55 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// Producto copiado del repo AXONTECH + ediciones locales para publicar
+model Producto {
+  id               String    @id // id del repo (numérico) como texto
+  nombreRepo       String
+  descripcionRepo  String    @default("")
+  precioRepo       Float     @default(0)
+  categoria        String    @default("")
+  imagen           String    @default("") // ruta relativa del repo: photos/xxx.webp
+  stockRepo        Int       @default(0)
+
+  // Ediciones locales (para publicar en Facebook / Revolico)
+  nombreLocal      String    @default("")
+  descripcionLocal String    @default("")
+  precioLocal      Float?
+  fotoOverride     String    @default("") // URL o ruta personalizada
+  hashtags         String    @default("") // separados por espacio
+  notas            String    @default("")
+
+  // Estados gestionados por el usuario
+  reservado        Boolean   @default(false)
+  publicado        Boolean   @default(false)
+  publicadoEn      String    @default("") // "facebook,revolico"
+  publicadoAt      DateTime?
+  agotadoManual    Boolean   @default(false)
+
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+}
+
+// Avisos: producto nuevo, se agotó, volvió stock, cambió precio
+model Notificacion {
+  id         String   @id @default(cuid())
+  tipo       String // nuevo | agotado | stock | precio
+  productoId String   @default("")
+  titulo     String
+  mensaje    String   @default("")
+  leida      Boolean  @default(false)
+  createdAt  DateTime @default(now())
+}
+
+// Estado de la última sincronización con GitHub
+model SyncEstado {
+  id              String    @id @default("principal")
+  ultimaSync      DateTime?
+  ultimoResultado String    @default("")
+}
