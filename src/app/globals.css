@@ -1,0 +1,240 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+}
+
+/* ---------- PALETA: Grafito (oscura, esmeralda) — por defecto ---------- */
+:root,
+[data-pal="grafito"] {
+  --radius: 1.1rem;
+  --background: #0b0e13;
+  --foreground: #eef2f7;
+  --card: #141922;
+  --card-foreground: #eef2f7;
+  --popover: #141922;
+  --popover-foreground: #eef2f7;
+  --primary: #34d399;
+  --primary-foreground: #06281c;
+  --secondary: #1e2530;
+  --secondary-foreground: #c7d0dc;
+  --muted: #1a212c;
+  --muted-foreground: #8b95a5;
+  --accent: #222b38;
+  --accent-foreground: #eef2f7;
+  --destructive: #f87171;
+  --border: #232b38;
+  --input: #2a3444;
+  --ring: #34d399;
+}
+
+/* ---------- PALETA: Perla (clara, verde azulado) ---------- */
+[data-pal="perla"] {
+  --background: #f5f6f8;
+  --foreground: #171b21;
+  --card: #ffffff;
+  --card-foreground: #171b21;
+  --popover: #ffffff;
+  --popover-foreground: #171b21;
+  --primary: #0f766e;
+  --primary-foreground: #ffffff;
+  --secondary: #eef1f4;
+  --secondary-foreground: #33404d;
+  --muted: #f0f2f5;
+  --muted-foreground: #5f6b7a;
+  --accent: #e9edef;
+  --accent-foreground: #171b21;
+  --destructive: #dc2626;
+  --border: #e2e6eb;
+  --input: #d5dbe2;
+  --ring: #0f766e;
+}
+
+/* ---------- PALETA: Atardecer (oscura, naranja) ---------- */
+[data-pal="atardecer"] {
+  --background: #15100b;
+  --foreground: #faf1e6;
+  --card: #1e1710;
+  --card-foreground: #faf1e6;
+  --popover: #1e1710;
+  --popover-foreground: #faf1e6;
+  --primary: #fb923c;
+  --primary-foreground: #3b1602;
+  --secondary: #2a2015;
+  --secondary-foreground: #e8d5bd;
+  --muted: #241b12;
+  --muted-foreground: #a8917a;
+  --accent: #2f2417;
+  --accent-foreground: #faf1e6;
+  --destructive: #f87171;
+  --border: #2e2418;
+  --input: #3a2d1e;
+  --ring: #fb923c;
+}
+
+/* ---------- PALETA: Bosque (clara, verde) ---------- */
+[data-pal="bosque"] {
+  --background: #f3f7f3;
+  --foreground: #152016;
+  --card: #ffffff;
+  --card-foreground: #152016;
+  --popover: #ffffff;
+  --popover-foreground: #152016;
+  --primary: #16a34a;
+  --primary-foreground: #ffffff;
+  --secondary: #e9f2ea;
+  --secondary-foreground: #2b4430;
+  --muted: #eef4ef;
+  --muted-foreground: #5c6f5f;
+  --accent: #e6f0e7;
+  --accent-foreground: #152016;
+  --destructive: #dc2626;
+  --border: #dfe8e0;
+  --input: #cfdccf;
+  --ring: #16a34a;
+}
+
+/* ---------- PALETA: Vino (oscura, rosa) ---------- */
+[data-pal="vino"] {
+  --background: #140c10;
+  --foreground: #f9edf2;
+  --card: #1e141a;
+  --card-foreground: #f9edf2;
+  --popover: #1e141a;
+  --popover-foreground: #f9edf2;
+  --primary: #fb7185;
+  --primary-foreground: #3f0410;
+  --secondary: #2b1c24;
+  --secondary-foreground: #ecd2da;
+  --muted: #251720;
+  --muted-foreground: #a98c99;
+  --accent: #32202b;
+  --accent-foreground: #f9edf2;
+  --destructive: #f87171;
+  --border: #31202a;
+  --input: #3d2935;
+  --ring: #fb7185;
+}
+
+/* ---------- PALETA: Lavanda (clara, violeta) ---------- */
+[data-pal="lavanda"] {
+  --background: #f7f5fb;
+  --foreground: #1d1930;
+  --card: #ffffff;
+  --card-foreground: #1d1930;
+  --popover: #ffffff;
+  --popover-foreground: #1d1930;
+  --primary: #7c3aed;
+  --primary-foreground: #ffffff;
+  --secondary: #efeaf8;
+  --secondary-foreground: #3d3358;
+  --muted: #f1eef8;
+  --muted-foreground: #6a6284;
+  --accent: #eae4f7;
+  --accent-foreground: #1d1930;
+  --destructive: #dc2626;
+  --border: #e6e1f0;
+  --input: #d9d2ec;
+  --ring: #7c3aed;
+}
+
+/* ---------- Modo blanco y negro ---------- */
+.modo-bn {
+  filter: grayscale(1) contrast(0.96);
+}
+
+html {
+  color-scheme: light dark;
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Scrollbar discreta para las zonas con scroll */
+.scroll-fino::-webkit-scrollbar {
+  height: 6px;
+  width: 6px;
+}
+.scroll-fino::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 999px;
+}
+.scroll-fino::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* Ocultar la barra horizontal pero mantener el scroll */
+.sin-scrollbar {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.sin-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+@keyframes aparecer {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.animar-aparecer {
+  animation: aparecer 0.25s ease-out both;
+}
+
+@keyframes subir-hoja {
+  from {
+    transform: translateY(100%);
+  }
+  to {
+    transform: translateY(0);
+  }
+}
+.animar-hoja {
+  animation: subir-hoja 0.28s cubic-bezier(0.32, 0.72, 0, 1) both;
+}
+
+@keyframes fondo-entrada {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+.animar-fondo {
+  animation: fondo-entrada 0.2s ease-out both;
+}
