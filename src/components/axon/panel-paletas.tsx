@@ -1,7 +1,9 @@
 'use client'
 
-import { Check, Moon, Sun } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { Check, KeyRound, Moon, Sun } from 'lucide-react'
 import { PALETAS } from '@/lib/axon'
+import { CLAVE_TOKEN } from '@/lib/cliente'
 import { Hoja } from './hoja'
 
 interface Props {
@@ -23,6 +25,21 @@ export function PanelPaletas({
   alAlternarBn,
   bnAuto,
 }: Props) {
+  // Token de administración (solo se usa si el servidor define ADMIN_TOKEN)
+  const [token, setToken] = useState(() => {
+    try {
+      return typeof window !== 'undefined' ? localStorage.getItem(CLAVE_TOKEN) || '' : ''
+    } catch {
+      return ''
+    }
+  })
+  const fijarToken = (v: string) => {
+    setToken(v)
+    try {
+      localStorage.setItem(CLAVE_TOKEN, v)
+    } catch {}
+  }
+
   return (
     <Hoja
       abierta={abierta}
@@ -106,6 +123,24 @@ export function PanelPaletas({
               />
             </span>
           </button>
+        </section>
+
+        <section>
+          <div className="mb-1.5 flex items-center gap-2">
+            <KeyRound className="h-4 w-4" />
+            <p className="text-sm font-bold">Administración</p>
+          </div>
+          <input
+            value={token}
+            onChange={(e) => fijarToken(e.target.value)}
+            placeholder="Token de administración (opcional)"
+            autoComplete="off"
+            className="h-11 w-full rounded-2xl border border-input bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
+          />
+          <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
+            Solo hace falta si quien despliega la app activó ADMIN_TOKEN en el
+            servidor. El token se guarda solo en este navegador.
+          </p>
         </section>
 
         <p className="text-center text-[11px] leading-relaxed text-muted-foreground">

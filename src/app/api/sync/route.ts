@@ -1,9 +1,11 @@
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { readdirSync, writeFileSync } from 'fs'
 import path from 'path'
 import { db } from '@/lib/db'
 import { REPO_RAW } from '@/lib/axon'
 import { generarHashtags } from '@/lib/axon'
+import { autorizado, respuestaNoAutorizado } from '@/lib/seguridad'
+import { respaldarBD } from '@/lib/respaldo'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
@@ -71,7 +73,14 @@ async function descargarFoto(ruta: string, destino: string, existentes: Set<stri
   }
 }
 
-export async function POST() {
+// Operación preparada fuera de la transacción para que esta sea corta
+type Operacion =
+  | { tipo: 'create'; id: string; data: Record<string, unknown> }
+  | { tipo: 'update'; id: string; data: Record<string, unknown> }
+
+export async function POST(req: NextRequest) {
+  if (!autorizado(req)) return respuestaNoAutorizado()
+
   try {
     const res = await fetchConTimeout(REPO_RAW + 'data.json', 25000)
     if (!res.ok) {
@@ -116,7 +125,9 @@ export async function POST() {
     let fotosDescargadas = 0
     const notifs: { tipo: string; productoId: string; titulo: string; mensaje: string }[] = []
     let intentosFoto = 0
+    const operaciones: Operacion[] = []
 
+    // FASE 1 (sin transacción): calcular cambios y descargar fotos (I/O lento)
     for (const r of remotos) {
       if (!r || typeof r.id !== 'number') continue
       const id = String(r.id)
@@ -138,7 +149,9 @@ export async function POST() {
 
       const ex = existentes.get(id)
       if (!ex) {
-        await db.producto.create({
+        operaciones.push({
+          tipo: 'create',
+          id,
           data: {
             id,
             nombreRepo: nombre,
@@ -187,19 +200,17 @@ export async function POST() {
             mensaje: nombre,
           })
         }
-        await db.producto.update({
-          where: { id },
-          data: {
-            nombreRepo: nombre,
-            descripcionRepo: descripcion,
-            precioRepo: precio,
-            categoria,
-            stockRepo: stock,
-            // Si lo habían marcado agotado a mano y ahora hay stock, se libera
-            ...(stock > 0 && ex.agotadoManual && ex.stockRepo <= 0 ? { agotadoManual: false } : {}),
-            ...(imagen && !ex.fotoOverride ? { imagen } : {}),
-          },
-        })
+        const data: Record<string, unknown> = {
+          nombreRepo: nombre,
+          descripcionRepo: descripcion,
+          precioRepo: precio,
+          categoria,
+          stockRepo: stock,
+          // Si lo habían marcado agotado a mano y ahora hay stock, se libera
+          ...(stock > 0 && ex.agotadoManual && ex.stockRepo <= 0 ? { agotadoManual: false } : {}),
+          ...(imagen && !ex.fotoOverride ? { imagen } : {}),
+        }
+        operaciones.push({ tipo: 'update', id, data })
         actualizados++
       }
     }
@@ -215,10 +226,7 @@ export async function POST() {
         // si ya estaba marcado agotado a mano y sin stock, ya se gestionó
         if (ex.agotadoManual && ex.stockRepo <= 0) continue
         quitados++
-        await db.producto.update({
-          where: { id },
-          data: { stockRepo: 0, agotadoManual: true },
-        })
+        operaciones.push({ tipo: 'update', id, data: { stockRepo: 0, agotadoManual: true } })
         notifs.push({
           tipo: 'quitar',
           productoId: id,
@@ -228,9 +236,25 @@ export async function POST() {
       }
     }
 
-    if (notifs.length > 0) {
-      await db.notificacion.createMany({ data: notifs })
-    }
+    // FASE 2: respaldo de la base antes de tocar nada + transacción atómica.
+    // Antes cada producto se guardaba uno a uno: un fallo a mitad dejaba el
+    // catálogo a medias. Ahora todo sale bien o todo se revierte.
+    respaldarBD()
+    await db.$transaction(
+      async (tx) => {
+        for (const op of operaciones) {
+          if (op.tipo === 'create') {
+            await tx.producto.create({ data: op.data as never })
+          } else {
+            await tx.producto.update({ where: { id: op.id }, data: op.data })
+          }
+        }
+        if (notifs.length > 0) {
+          await tx.notificacion.createMany({ data: notifs })
+        }
+      },
+      { timeout: 25000, maxWait: 8000 }
+    )
 
     const ahora = new Date()
     const resumen =
@@ -258,6 +282,7 @@ export async function POST() {
     })
   } catch (e) {
     const msg = e instanceof Error ? (e.name === 'AbortError' ? 'Tiempo de espera agotado al conectar con GitHub' : e.message) : 'Error desconocido'
+    console.error('POST /api/sync falló:', e)
     return NextResponse.json({ ok: false, error: msg }, { status: 200 })
   }
 }

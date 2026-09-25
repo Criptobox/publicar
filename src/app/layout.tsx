@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from 'next'
 import { Geist, Geist_Mono } from 'next/font/google'
 import './globals.css'
+import { RegistroSW } from '@/components/registro-sw'
 
 const geistSans = Geist({
   variable: '--font-geist-sans',
@@ -16,8 +17,15 @@ export const metadata: Metadata = {
   title: 'Publicador AXON · Catálogo para Facebook y Revolico',
   description:
     'Copia productos del catálogo AXONTECH, edítalos, márcalos como publicados o reservados y genera el texto con hashtags para Facebook y Revolico.',
+  manifest: '/manifest.json',
   icons: {
-    icon: 'https://z-cdn.chatglm.cn/z-ai/static/logo.svg',
+    icon: '/icons/icon-192.png',
+    apple: '/icons/apple-touch-icon.png',
+  },
+  appleWebApp: {
+    capable: true,
+    title: 'Publicador AXON',
+    statusBarStyle: 'black-translucent',
   },
 }
 
@@ -50,6 +58,7 @@ export default function RootLayout({
       </head>
       <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
         {children}
+        <RegistroSW />
       </body>
     </html>
   )

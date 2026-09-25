@@ -1,0 +1,24 @@
+# Dependencias y artefactos de build
+node_modules/
+.next/
+out/
+
+# Entorno: cada máquina define su propia ruta de base de datos
+.env
+.env.local
+.env*.local
+
+# Respaldos locales de la base de datos
+backups/
+
+# Logs
+dev.log
+server.log
+*.log
+
+# Sistema
+.DS_Store
+Thumbs.db
+
+# NOTA: db/custom.db NO se ignora a propósito: es el catálogo con tus
+# marcas de publicado/reservado y viaja con el repo.

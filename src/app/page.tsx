@@ -6,20 +6,24 @@ import {
   Bell,
   Check,
   Hand,
+  ListChecks,
   Megaphone,
   PackageX,
   Palette,
   RefreshCw,
   Search,
+  X,
 } from 'lucide-react'
 import {
   esAgotado,
   nombreVisible,
   descripcionVisible,
+  precioVisible,
   type Notificacion,
   type Producto,
   type Stats,
 } from '@/lib/axon'
+import { encabezadosAdmin, MENSAJE_401 } from '@/lib/cliente'
 import { FOTOS_REPO } from '@/lib/fotos-repo'
 import { TarjetaProducto } from '@/components/axon/tarjeta-producto'
 import { HojaEditar } from '@/components/axon/hoja-editar'
@@ -28,6 +32,7 @@ import { PanelPaletas } from '@/components/axon/panel-paletas'
 import { PanelNotificaciones } from '@/components/axon/panel-notificaciones'
 
 type EstadoFiltro = 'activos' | 'pendientes' | 'reservados' | 'publicados' | 'agotados' | 'todos'
+type Orden = 'nombre' | 'precio-asc' | 'precio-desc' | 'stock'
 
 const FILTROS: { id: EstadoFiltro; etiqueta: string }[] = [
   { id: 'activos', etiqueta: 'Disponibles' },
@@ -59,6 +64,20 @@ function cumpleFiltro(
   }
 }
 
+function haceRelativo(fechaISO: string, referencia: number): string {
+  const ms = referencia - new Date(fechaISO).getTime()
+  if (!isFinite(ms) || ms < 0) return 'ahora mismo'
+  const min = Math.floor(ms / 60000)
+  if (min < 1) return 'hace instantes'
+  if (min === 1) return 'hace 1 min'
+  if (min < 60) return `hace ${min} min`
+  const h = Math.floor(min / 60)
+  if (h === 1) return 'hace 1 hora'
+  if (h < 24) return `hace ${h} horas`
+  const d = Math.floor(h / 24)
+  return d === 1 ? 'hace 1 día' : `hace ${d} días`
+}
+
 export default function Pagina() {
   const [productos, setProductos] = useState<Producto[]>([])
   const [stats, setStats] = useState<Stats | null>(null)
@@ -67,10 +86,20 @@ export default function Pagina() {
   const [ultimaSync, setUltimaSync] = useState<string | null>(null)
   const [cargando, setCargando] = useState(true)
   const [sincronizando, setSincronizando] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
   const [q, setQ] = useState('')
+  const [qBusqueda, setQBusqueda] = useState('') // versión con debounce de q
   const [categoria, setCategoria] = useState('todas')
   const [filtro, setFiltro] = useState<EstadoFiltro>('activos')
+  const [orden, setOrden] = useState<Orden>('nombre')
+
+  // Selección múltiple
+  const [modoSeleccion, setModoSeleccion] = useState(false)
+  const [seleccion, setSeleccion] = useState<Set<string>>(new Set())
+
+  // Reloj suave para las fechas relativas ("hace 5 min")
+  const [ahora, setAhora] = useState(() => Date.now())
 
   const [paleta, setPaleta] = useState('grafito')
   const [bnForzado, setBnForzado] = useState(false)
@@ -87,21 +116,43 @@ export default function Pagina() {
     temporizadorToast.current = setTimeout(() => setToast(''), 2600)
   }, [])
 
+  // Debounce de la búsqueda: no filtra cada tecla, espera 250 ms
+  useEffect(() => {
+    const t = setTimeout(() => setQBusqueda(q), 250)
+    return () => clearTimeout(t)
+  }, [q])
+
+  // Reloj para las fechas relativas
+  useEffect(() => {
+    const t = setInterval(() => setAhora(Date.now()), 30000)
+    return () => clearInterval(t)
+  }, [])
+
   const cargar = useCallback(async () => {
     try {
       const res = await fetch('/api/productos', { cache: 'no-store' })
+      if (!res.ok) {
+        let mensaje = `El servidor respondió con error ${res.status}`
+        try {
+          const d = await res.json()
+          if (d?.error) mensaje = d.error
+        } catch {}
+        throw new Error(mensaje)
+      }
       const datos = await res.json()
       setProductos(datos.productos ?? [])
       setStats(datos.stats ?? null)
       setNotificaciones(datos.notificaciones ?? [])
       setNoLeidas(datos.noLeidas ?? 0)
       setUltimaSync(datos.ultimaSync ?? null)
-    } catch {
-      mostrarToast('No se pudo cargar el catálogo')
+      setError(null)
+    } catch (e) {
+      console.error('Error al cargar el catálogo:', e)
+      setError(e instanceof Error ? e.message : 'No se pudo cargar el catálogo')
     } finally {
       setCargando(false)
     }
-  }, [mostrarToast])
+  }, [])
 
   useEffect(() => {
     cargar()
@@ -140,9 +191,13 @@ export default function Pagina() {
       try {
         const res = await fetch(`/api/productos/${id}`, {
           method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', ...encabezadosAdmin() },
           body: JSON.stringify(cambios),
         })
+        if (res.status === 401) {
+          mostrarToast(MENSAJE_401)
+          return false
+        }
         const datos = await res.json()
         if (datos.ok && datos.producto) {
           setProductos((lista) =>
@@ -152,7 +207,8 @@ export default function Pagina() {
         }
         mostrarToast(datos.error || 'No se pudo guardar')
         return false
-      } catch {
+      } catch (e) {
+        console.error('Error al actualizar producto:', e)
         mostrarToast('Sin conexión con el servidor')
         return false
       }
@@ -160,11 +216,21 @@ export default function Pagina() {
     [mostrarToast]
   )
 
+  const sincronizandoRef = useRef(false)
+
   const sincronizar = useCallback(async () => {
-    if (sincronizando) return
+    if (sincronizandoRef.current) return
+    sincronizandoRef.current = true
     setSincronizando(true)
     try {
-      const res = await fetch('/api/sync', { method: 'POST' })
+      const res = await fetch('/api/sync', {
+        method: 'POST',
+        headers: encabezadosAdmin(),
+      })
+      if (res.status === 401) {
+        mostrarToast(MENSAJE_401)
+        return
+      }
       const d = await res.json()
       if (d.ok) {
         const partes: string[] = []
@@ -181,12 +247,36 @@ export default function Pagina() {
         mostrarToast(`Error al sincronizar: ${d.error}`)
       }
       await cargar()
-    } catch {
+    } catch (e) {
+      console.error('Error al sincronizar:', e)
       mostrarToast('No se pudo conectar con GitHub')
     } finally {
+      sincronizandoRef.current = false
       setSincronizando(false)
     }
-  }, [sincronizando, mostrarToast, cargar])
+  }, [mostrarToast, cargar])
+
+  // Auto-sincronización: al volver a la app y cada 10 minutos (si pasaron 5 min
+  // desde la anterior) se refresca el catálogo solo.
+  const ultimaAutoSync = useRef(Date.now())
+  useEffect(() => {
+    const ESPERA_MS = 5 * 60 * 1000
+    const intenta = () => {
+      if (document.visibilityState !== 'visible') return
+      if (Date.now() - ultimaAutoSync.current < ESPERA_MS) return
+      ultimaAutoSync.current = Date.now()
+      sincronizar()
+    }
+    const alVisibilidad = () => {
+      if (document.visibilityState === 'visible') intenta()
+    }
+    document.addEventListener('visibilitychange', alVisibilidad)
+    const t = setInterval(intenta, 10 * 60 * 1000)
+    return () => {
+      document.removeEventListener('visibilitychange', alVisibilidad)
+      clearInterval(t)
+    }
+  }, [sincronizar])
 
   const alternarReservado = useCallback(
     async (p: Producto) => {
@@ -234,17 +324,91 @@ export default function Pagina() {
 
   const marcarNotificacionesLeidas = useCallback(async () => {
     try {
-      await fetch('/api/notificaciones', {
+      const res = await fetch('/api/notificaciones', {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...encabezadosAdmin() },
         body: JSON.stringify({ accion: 'leer-todas' }),
       })
+      if (res.status === 401) {
+        mostrarToast(MENSAJE_401)
+        return
+      }
       setNotificaciones((lista) => lista.map((n) => ({ ...n, leida: true })))
       setNoLeidas(0)
     } catch {
       mostrarToast('No se pudo marcar como leído')
     }
   }, [mostrarToast])
+
+  // ---- Selección múltiple ----
+
+  const alternarSeleccion = useCallback((id: string) => {
+    setSeleccion((prev) => {
+      const nuevo = new Set(prev)
+      if (nuevo.has(id)) nuevo.delete(id)
+      else nuevo.add(id)
+      return nuevo
+    })
+  }, [])
+
+  const salirSeleccion = useCallback(() => {
+    setModoSeleccion(false)
+    setSeleccion(new Set())
+  }, [])
+
+  const alternarModoSeleccion = useCallback(() => {
+    setModoSeleccion((v) => {
+      if (v) setSeleccion(new Set())
+      return !v
+    })
+  }, [])
+
+  const aplicarLote = useCallback(
+    async (cambios: {
+      publicado?: boolean
+      reservado?: boolean
+      agotadoManual?: boolean
+    }) => {
+      if (seleccion.size === 0) return
+      const ids = [...seleccion]
+      try {
+        const res = await fetch('/api/productos/lote', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json', ...encabezadosAdmin() },
+          body: JSON.stringify({ ids, cambios }),
+        })
+        if (res.status === 401) {
+          mostrarToast(MENSAJE_401)
+          return
+        }
+        const d = await res.json()
+        if (!d.ok) {
+          mostrarToast(d.error || 'No se pudo aplicar la acción')
+          return
+        }
+        const sello = new Date().toISOString()
+        const idsSet = new Set(ids)
+        setProductos((lista) =>
+          lista.map((p) => {
+            if (!idsSet.has(p.id)) return p
+            const c: Partial<Producto> = {}
+            for (const k of ['publicado', 'reservado', 'agotadoManual'] as const) {
+              if (typeof cambios[k] === 'boolean') c[k] = cambios[k] as boolean
+            }
+            if (cambios.publicado === true && !p.publicado) c.publicadoAt = sello
+            if (cambios.publicado === false) c.publicadoAt = null
+            return { ...p, ...c }
+          })
+        )
+        mostrarToast(`Listo: ${d.actualizados} producto(s) actualizados`)
+        salirSeleccion()
+      } catch (e) {
+        console.error('Error en acción en lote:', e)
+        mostrarToast('Sin conexión con el servidor')
+      }
+    },
+    [seleccion, mostrarToast, salirSeleccion]
+  )
 
   // Derivados
   const bnAuto = stats?.todoReservado ?? false
@@ -273,7 +437,7 @@ export default function Pagina() {
   }, [productos])
 
   const lista = useMemo(() => {
-    const q2 = q.trim().toLowerCase()
+    const q2 = qBusqueda.trim().toLowerCase()
     let l = productos.filter((p) => {
       if (!cumpleFiltro(p, filtro)) return false
       if (categoria !== 'todas' && p.categoria !== categoria) return false
@@ -283,6 +447,7 @@ export default function Pagina() {
           descripcionVisible(p),
           p.categoria,
           p.notas,
+          p.hashtags,
         ]
           .join(' ')
           .toLowerCase()
@@ -294,10 +459,19 @@ export default function Pagina() {
       const rango = (p: Producto) => (esAgotado(p) ? 2 : p.reservado ? 1 : 0)
       const dif = rango(a) - rango(b)
       if (dif !== 0) return dif
-      return nombreVisible(a).localeCompare(nombreVisible(b), 'es')
+      switch (orden) {
+        case 'precio-asc':
+          return precioVisible(a) - precioVisible(b)
+        case 'precio-desc':
+          return precioVisible(b) - precioVisible(a)
+        case 'stock':
+          return b.stockRepo - a.stockRepo
+        default:
+          return nombreVisible(a).localeCompare(nombreVisible(b), 'es')
+      }
     })
     return l
-  }, [productos, filtro, categoria, q])
+  }, [productos, filtro, categoria, qBusqueda, orden])
 
   const cerrarEditar = useCallback(() => setEditando(null), [])
   const cerrarPublicar = useCallback(() => setPublicando(null), [])
@@ -415,7 +589,7 @@ export default function Pagina() {
           </div>
 
           {/* Categorías */}
-          <div className="sin-scrollbar -mx-4 mb-5 flex gap-2 overflow-x-auto px-4 pb-1">
+          <div className="sin-scrollbar -mx-4 mb-2 flex gap-2 overflow-x-auto px-4 pb-1">
             {['todas', ...categorias].map((c) => {
               const activo = categoria === c
               return (
@@ -435,6 +609,33 @@ export default function Pagina() {
             })}
           </div>
 
+          {/* Ordenar y seleccionar */}
+          <div className="mb-4 flex items-center justify-between gap-2">
+            <button
+              onClick={alternarModoSeleccion}
+              aria-pressed={modoSeleccion}
+              className={`flex h-9 items-center gap-1.5 rounded-full px-3.5 text-xs font-bold transition ${
+                modoSeleccion
+                  ? 'bg-primary text-primary-foreground'
+                  : 'bg-secondary text-secondary-foreground hover:bg-accent'
+              }`}
+            >
+              <ListChecks className="h-4 w-4" />
+              {modoSeleccion ? `Salir (${seleccion.size})` : 'Seleccionar'}
+            </button>
+            <select
+              value={orden}
+              onChange={(e) => setOrden(e.target.value as Orden)}
+              aria-label="Ordenar productos"
+              className="h-9 rounded-full border border-border bg-card px-3 text-xs font-semibold text-foreground outline-none focus:ring-2 focus:ring-ring"
+            >
+              <option value="nombre">Orden: nombre</option>
+              <option value="precio-asc">Precio: menor a mayor</option>
+              <option value="precio-desc">Precio: mayor a menor</option>
+              <option value="stock">Más stock primero</option>
+            </select>
+          </div>
+
           {/* Lista de productos */}
           {cargando ? (
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -452,6 +653,23 @@ export default function Pagina() {
                 </div>
               ))}
             </div>
+          ) : error ? (
+            <div className="flex flex-col items-center gap-3 rounded-3xl border border-red-500/30 bg-red-500/10 px-6 py-12 text-center">
+              <AlertTriangle className="h-10 w-10 text-red-500" />
+              <p className="max-w-[340px] text-sm font-semibold text-red-600 dark:text-red-400">
+                {error}
+              </p>
+              <p className="max-w-[340px] text-xs leading-relaxed text-muted-foreground">
+                Revisa que el servidor esté corriendo y que DATABASE_URL apunte al
+                archivo db/custom.db del proyecto.
+              </p>
+              <button
+                onClick={cargar}
+                className="mt-1 flex h-11 items-center gap-2 rounded-full bg-primary px-5 text-sm font-bold text-primary-foreground transition hover:opacity-90"
+              >
+                <RefreshCw className="h-4 w-4" /> Reintentar
+              </button>
+            </div>
           ) : lista.length === 0 ? (
             <div className="flex flex-col items-center gap-3 rounded-3xl border border-dashed border-border py-16 text-center text-muted-foreground">
               {filtro === 'agotados' ? (
@@ -462,7 +680,7 @@ export default function Pagina() {
                 <Megaphone className="h-10 w-10 opacity-40" />
               )}
               <p className="max-w-[260px] text-sm">
-                {q
+                {qBusqueda
                   ? 'Ningún producto coincide con la búsqueda.'
                   : filtro === 'pendientes'
                     ? '¡Todo publicado! No quedan productos pendientes.'
@@ -479,6 +697,9 @@ export default function Pagina() {
                   alPublicar={() => setPublicando(p)}
                   alAlternarReservado={() => alternarReservado(p)}
                   alAlternarPublicado={() => alternarPublicado(p)}
+                  modoSeleccion={modoSeleccion}
+                  seleccionado={seleccion.has(p.id)}
+                  alAlternarSeleccion={() => alternarSeleccion(p.id)}
                 />
               ))}
             </div>
@@ -491,14 +712,17 @@ export default function Pagina() {
             <p className="text-[11px] leading-relaxed text-muted-foreground">
               Productos copiados de{' '}
               <span className="font-semibold">github.com/axontech92/AXONTECH</span>
-              {ultimaSync
-                ? ` · Última sincronización: ${new Date(ultimaSync).toLocaleString('es-CU', {
-                    day: 'numeric',
-                    month: 'short',
-                    hour: '2-digit',
-                    minute: '2-digit',
-                  })}`
-                : ''}
+              {ultimaSync ? (
+                <>
+                  {' '}
+                  ·{' '}
+                  <span title={new Date(ultimaSync).toLocaleString('es-CU')}>
+                    Última sincronización: {haceRelativo(ultimaSync, ahora)}
+                  </span>
+                </>
+              ) : (
+                ''
+              )}
             </p>
             <p className="flex items-center justify-center gap-1 text-[11px] text-muted-foreground">
               <Check className="h-3 w-3" /> Los agotados se esconden solos y te avisamos
@@ -507,6 +731,49 @@ export default function Pagina() {
           </div>
         </footer>
       </div>
+
+      {/* Barra de acciones en lote */}
+      {modoSeleccion && seleccion.size > 0 ? (
+        <div className="fixed inset-x-0 bottom-0 z-50 border-t border-border bg-background/95 px-4 pb-[calc(0.75rem+env(safe-area-inset-bottom))] pt-2.5 backdrop-blur">
+          <div className="mx-auto flex max-w-3xl flex-wrap items-center gap-2">
+            <span className="mr-auto text-sm font-bold">
+              {seleccion.size} seleccionado(s)
+            </span>
+            <button
+              onClick={() => aplicarLote({ publicado: true })}
+              className="flex h-10 items-center gap-1.5 rounded-full bg-emerald-500 px-3.5 text-xs font-bold text-white transition hover:opacity-90"
+            >
+              <Check className="h-4 w-4" /> Publicar
+            </button>
+            <button
+              onClick={() => aplicarLote({ publicado: false })}
+              className="flex h-10 items-center gap-1.5 rounded-full bg-secondary px-3.5 text-xs font-bold text-secondary-foreground transition hover:bg-accent"
+            >
+              Quitar publicación
+            </button>
+            <button
+              onClick={() => aplicarLote({ reservado: true })}
+              className="flex h-10 items-center gap-1.5 rounded-full bg-amber-400 px-3.5 text-xs font-bold text-black transition hover:opacity-90"
+            >
+              <Hand className="h-4 w-4" /> Reservar
+            </button>
+            <button
+              onClick={() => aplicarLote({ reservado: false })}
+              className="flex h-10 items-center gap-1.5 rounded-full bg-secondary px-3.5 text-xs font-bold text-secondary-foreground transition hover:bg-accent"
+            >
+              Liberar
+            </button>
+            <button
+              onClick={salirSeleccion}
+              aria-label="Salir de la selección"
+              title="Salir de la selección"
+              className="flex h-10 w-10 items-center justify-center rounded-full bg-secondary text-secondary-foreground transition hover:bg-accent"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
+      ) : null}
 
       {/* Hojas y paneles (fuera del filtro B/N para poder controlar el diseño) */}
       <HojaEditar

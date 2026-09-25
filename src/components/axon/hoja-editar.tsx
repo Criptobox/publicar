@@ -135,7 +135,7 @@ export function HojaEditar({ producto, fotosRepo, alCerrar, alGuardar, bn }: Pro
             <Camera className="h-4 w-4" /> Foto
           </label>
           <div className="flex gap-3">
-            <div className="h-24 w-32 shrink-0 overflow-hidden rounded-2xl border border-border bg-muted">
+            <div className="relative h-24 w-32 shrink-0 overflow-hidden rounded-2xl border border-border bg-muted">
               <FotoProducto
                 ruta={f.fotoOverride || producto.imagen}
                 alt="Foto actual"

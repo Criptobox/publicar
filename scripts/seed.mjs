@@ -1,8 +1,25 @@
 // Semilla: importa los productos del repo AXONTECH (desde data.json, que es
 // el archivo que la app del dueño sincroniza automáticamente tras cada venta;
 // productos.json quedó congelado el 13/8/2026 y está desactualizado)
+//
+// Busca los datos en este orden:
+//   1. datos/data-repo.json dentro del proyecto (copia local)
+//   2. data.json del repo AXONTECH en GitHub (remoto)
+//
+// Uso: npm run seed   (o: node scripts/seed.mjs)
 import { PrismaClient } from '@prisma/client'
-import { readFileSync, readdirSync } from 'fs'
+import { existsSync, mkdirSync, readFileSync, readdirSync } from 'fs'
+import path from 'path'
+import { fileURLToPath } from 'url'
+
+const raiz = path.join(path.dirname(fileURLToPath(import.meta.url)), '..')
+
+// Fallback de DATABASE_URL para que funcione en cualquier máquina
+if (!process.env.DATABASE_URL) {
+  process.env.DATABASE_URL = `file:${path.join(raiz, 'db', 'custom.db')}`
+}
+
+const REPO_RAW = 'https://raw.githubusercontent.com/axontech92/AXONTECH/main/'
 
 const db = new PrismaClient()
 
@@ -53,10 +70,26 @@ function parsePrecio(p) {
   return 0
 }
 
+async function cargarDatos() {
+  const archivoLocal = path.join(raiz, 'datos', 'data-repo.json')
+  if (existsSync(archivoLocal)) {
+    console.log('Fuente: datos/data-repo.json (local)')
+    return JSON.parse(readFileSync(archivoLocal, 'utf8'))
+  }
+  console.log('Fuente: data.json del repo AXONTECH en GitHub…')
+  const res = await fetch(REPO_RAW + 'data.json')
+  if (!res.ok) {
+    throw new Error(`No se pudo descargar data.json (GitHub respondió ${res.status})`)
+  }
+  return await res.json()
+}
+
 async function main() {
-  const datos = JSON.parse(readFileSync('/home/z/my-project/datos/data-repo.json', 'utf8'))
+  const datos = await cargarDatos()
   const remotos = Array.isArray(datos.productos) ? datos.productos : []
-  const fotos = readdirSync('/home/z/my-project/public/photos')
+  const dirFotos = path.join(raiz, 'public', 'photos')
+  mkdirSync(dirFotos, { recursive: true })
+  const fotos = readdirSync(dirFotos)
 
   const mapaCats = new Map()
   for (const c of datos.categorias ?? []) {

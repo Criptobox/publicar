@@ -1,6 +1,6 @@
 'use client'
 
-import { Check, Hand, Megaphone, Pencil, PackageX } from 'lucide-react'
+import { Check, Hand, Megaphone, PackageX, Pencil, SquareCheck, Square } from 'lucide-react'
 import {
   esAgotado,
   nombreVisible,
@@ -16,6 +16,9 @@ interface Props {
   alPublicar: () => void
   alAlternarReservado: () => void
   alAlternarPublicado: () => void
+  modoSeleccion?: boolean
+  seleccionado?: boolean
+  alAlternarSeleccion?: () => void
 }
 
 export function TarjetaProducto({
@@ -24,15 +27,18 @@ export function TarjetaProducto({
   alPublicar,
   alAlternarReservado,
   alAlternarPublicado,
+  modoSeleccion = false,
+  seleccionado = false,
+  alAlternarSeleccion,
 }: Props) {
   const agotado = esAgotado(p)
   const stockBajo = !agotado && p.stockRepo > 0 && p.stockRepo <= 5
 
   return (
     <article
-      className={`group relative overflow-hidden rounded-3xl border border-border bg-card shadow-sm transition hover:shadow-md ${
-        agotado ? 'opacity-70' : ''
-      }`}
+      className={`group relative overflow-hidden rounded-3xl border bg-card shadow-sm transition hover:shadow-md ${
+        seleccionado ? 'border-primary ring-2 ring-primary' : 'border-border'
+      } ${agotado ? 'opacity-70' : ''}`}
     >
       {/* Foto */}
       <div className="relative aspect-[4/3] w-full overflow-hidden bg-muted">
@@ -49,6 +55,23 @@ export function TarjetaProducto({
               <PackageX className="h-4 w-4" /> Agotado
             </span>
           </div>
+        ) : null}
+
+        {/* Casilla de selección (modo selección múltiple) */}
+        {modoSeleccion ? (
+          <button
+            type="button"
+            onClick={alAlternarSeleccion}
+            aria-pressed={seleccionado}
+            aria-label={seleccionado ? 'Quitar de la selección' : 'Añadir a la selección'}
+            className={`absolute right-3 top-3 z-10 flex h-10 w-10 items-center justify-center rounded-full shadow-lg transition ${
+              seleccionado
+                ? 'bg-primary text-primary-foreground'
+                : 'bg-black/60 text-white hover:bg-black/75'
+            }`}
+          >
+            {seleccionado ? <SquareCheck className="h-5 w-5" /> : <Square className="h-5 w-5" />}
+          </button>
         ) : null}
 
         {/* Insignias de estado */}
@@ -106,22 +129,23 @@ export function TarjetaProducto({
         <div className="mt-3 flex items-center gap-2">
           <button
             onClick={alPublicar}
-            disabled={agotado}
+            disabled={agotado || modoSeleccion}
             className="flex h-11 flex-1 items-center justify-center gap-2 rounded-2xl bg-primary text-sm font-bold text-primary-foreground transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
           >
             <Megaphone className="h-4 w-4" /> Publicar
           </button>
           <button
             onClick={alEditar}
+            disabled={modoSeleccion}
             aria-label="Editar producto"
             title="Editar"
-            className="flex h-11 w-11 items-center justify-center rounded-2xl bg-secondary text-secondary-foreground transition hover:bg-accent"
+            className="flex h-11 w-11 items-center justify-center rounded-2xl bg-secondary text-secondary-foreground transition hover:bg-accent disabled:cursor-not-allowed disabled:opacity-40"
           >
             <Pencil className="h-4 w-4" />
           </button>
           <button
             onClick={alAlternarReservado}
-            disabled={agotado}
+            disabled={agotado || modoSeleccion}
             aria-label={p.reservado ? 'Quitar reserva' : 'Marcar como reservado'}
             aria-pressed={p.reservado}
             title={p.reservado ? 'Quitar reserva' : 'Reservar'}
@@ -135,6 +159,7 @@ export function TarjetaProducto({
           </button>
           <button
             onClick={alAlternarPublicado}
+            disabled={modoSeleccion}
             aria-label={p.publicado ? 'Marcar como no publicado' : 'Marcar como publicado'}
             aria-pressed={p.publicado}
             title={p.publicado ? 'Quitar publicado' : 'Marcar publicado'}
