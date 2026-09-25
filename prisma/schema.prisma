@@ -34,6 +34,10 @@ model Producto {
 
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
+
+  // Índices: aceleran el ordenamiento por nombre y el filtro por categoría
+  @@index([nombreRepo])
+  @@index([categoria])
 }
 
 // Avisos: producto nuevo, se agotó, volvió stock, cambió precio
@@ -45,6 +49,9 @@ model Notificacion {
   mensaje    String   @default("")
   leida      Boolean  @default(false)
   createdAt  DateTime @default(now())
+
+  // Índice: la lista de avisos siempre se ordena por fecha
+  @@index([createdAt])
 }
 
 // Estado de la última sincronización con GitHub
